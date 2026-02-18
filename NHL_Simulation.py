@@ -12,7 +12,7 @@
 #
 # Notes:
 # - Any “production” modules (rest/goalies/pace/home-ice/injuries) are OPTIONAL.
-# - If those CSVs are absent, the sim prints a warning and continues with neutral defaults.
+# - If those CSVs are absent, the sim prints ONE demo line and continues with neutral defaults.
 # - CSV column names are auto-detected (handles common variants).
 # ============================================
 
@@ -50,8 +50,20 @@ PATHS = {
 # -----------------------------
 # Demo-safe IO
 # -----------------------------
+# Tracks if ANY optional module is missing or failed to load
+OPTIONAL_MISSING = False
+_DEMO_LINE_PRINTED = False
+
 def _warn(msg: str) -> None:
-    print(f"[demo-warning] {msg}")
+    # Do not spam warnings; just record that optional modules are disabled.
+    global OPTIONAL_MISSING
+    OPTIONAL_MISSING = True
+
+def _print_demo_line_once() -> None:
+    global _DEMO_LINE_PRINTED
+    if not _DEMO_LINE_PRINTED:
+        print("[demo] Running demo configuration (optional production modules disabled).")
+        _DEMO_LINE_PRINTED = True
 
 def require_csv(path: str, what: str) -> pd.DataFrame:
     if not os.path.exists(path):
@@ -279,7 +291,6 @@ def special_teams_adjustment(home: str, away: str,
     away_pp_goals = away_pp_rate60 * (pp_minutes / 60.0)
 
     # Optional: PK minutes symmetric in this toy model (kept for readability)
-    # If you want asymmetry later, split pp_minutes into home_pp and away_pp.
     _ = pk_minutes  # placeholder
 
     return home_pp_goals, away_pp_goals
@@ -324,10 +335,8 @@ def simulate_matchup(home: str, away: str,
     ties = sims - home_wins - away_wins
 
     # OT handling: simple 3v3-ish coinflip weighted by slight edge from regulation mu
-    # (kept demo-simple; neutral if you prefer)
     if include_ot and ties > 0:
         p_home_ot = home_mu_60 / max(home_mu_60 + away_mu_60, 1e-9)
-        # resolve ties
         tie_mask = (hg == ag)
         ot_draws = np.random.rand(tie_mask.sum())
         home_ot_wins = (ot_draws < p_home_ot).sum()
@@ -384,6 +393,10 @@ def main():
         seed=args.seed,
     )
 
+    # Print ONE demo line if optional modules were missing/disabled
+    if OPTIONAL_MISSING:
+        _print_demo_line_once()
+
     home = args.home.upper()
     away = args.away.upper()
 
@@ -405,5 +418,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
